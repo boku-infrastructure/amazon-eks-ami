@@ -620,6 +620,20 @@ else
   exit 1
 fi
 
+# Remove folders preventing docker.service from starting
+if [ -d /var/run/docker.sock ]; then
+  echo "Removing /var/run/docker.sock/.."
+  rmdir /var/run/docker.sock
+fi
+if [ -d /var/run/docker.pid ]; then
+  echo "Removing /var/run/docker.pid/.."
+  rmdir /var/run/docker.pid
+fi
+echo "Starting the docker daemon to enable docker builds."
+systemctl daemon-reload
+systemctl enable docker
+systemctl restart docker
+
 mkdir -p /etc/systemd/system/kubelet.service.d
 
 cat << EOF > /etc/systemd/system/kubelet.service.d/10-kubelet-args.conf
