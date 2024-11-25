@@ -12,7 +12,7 @@ endif
 K8S_VERSION_PARTS := $(subst ., ,$(kubernetes_version))
 K8S_VERSION_MINOR := $(word 1,${K8S_VERSION_PARTS}).$(word 2,${K8S_VERSION_PARTS})
 
-AMI_VARIANT ?= amazon-eks
+AMI_VARIANT ?= amazon-eks-docker
 AMI_VERSION ?= v$(shell date '+%Y%m%d')
 os_distro ?= al2
 arch ?= x86_64
