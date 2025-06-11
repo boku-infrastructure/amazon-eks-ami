@@ -63,7 +63,8 @@ sudo dnf install -y \
   unzip \
   wget \
   mdadm \
-  pigz
+  pigz \
+  python3-dnf-plugin-versionlock
 
 ################################################################################
 ### Networking #################################################################
@@ -71,6 +72,9 @@ sudo dnf install -y \
 
 # needed by kubelet
 sudo dnf install -y iptables-nft
+
+# updating this package may trigger post-install hooks or config changes that undo what happens below
+sudo dnf versionlock amazon-ec2-net-utils
 
 # Mask udev triggers installed by amazon-ec2-net-utils package
 sudo touch /etc/udev/rules.d/99-vpc-policy-routes.rules
@@ -85,14 +89,14 @@ ManageForeignRoutingPolicyRules=no
 EOF
 
 # Temporary fix for https://github.com/aws/amazon-vpc-cni-k8s/pull/2118
-sudo sed -i "s/^MACAddressPolicy=.*/MACAddressPolicy=none/" /usr/lib/systemd/network/99-default.link || true
-
-################################################################################
-### Time #######################################################################
-################################################################################
-
-sudo cp -v $WORKING_DIR/shared/configure-clocksource.service /etc/systemd/system/configure-clocksource.service
-sudo systemctl enable configure-clocksource
+sudo mkdir -p /etc/systemd/network/99-default.link.d/
+cat << EOF | sudo tee /etc/systemd/network/99-default.link.d/99-no-policy.conf
+# Ensure MACAddressPolicy=none, reinstalling systemd-udev writes /usr/lib/systemd/network/99-default.link
+# with value set to persistent
+# https://github.com/aws/amazon-vpc-cni-k8s/issues/2103#issuecomment-1321698870
+[Link]
+MACAddressPolicy=none
+EOF
 
 ################################################################################
 ### SSH ########################################################################
@@ -175,8 +179,8 @@ BINARIES=(
 for binary in ${BINARIES[*]}; do
   if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
     echo "AWS cli present - using it to copy binaries from s3."
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary .
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary.sha256 .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary.sha256 .
   else
     echo "AWS cli missing - using wget to fetch binaries from s3. Note: This won't work for private bucket."
     sudo wget $S3_URL_BASE/$binary
@@ -184,6 +188,7 @@ for binary in ${BINARIES[*]}; do
   fi
   sudo sha256sum -c $binary.sha256
   sudo chmod +x $binary
+  sudo chown root:root $binary
   sudo mv $binary /usr/bin/
 done
 
@@ -202,7 +207,7 @@ ECR_CREDENTIAL_PROVIDER_BINARY="ecr-credential-provider"
 
 if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
   echo "AWS cli present - using it to copy ${ECR_CREDENTIAL_PROVIDER_BINARY} from s3."
-  sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$ECR_CREDENTIAL_PROVIDER_BINARY .
+  aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$ECR_CREDENTIAL_PROVIDER_BINARY .
 else
   echo "AWS cli missing - using wget to fetch ${ECR_CREDENTIAL_PROVIDER_BINARY} from s3. Note: This won't work for private bucket."
   sudo wget "$S3_URL_BASE/$ECR_CREDENTIAL_PROVIDER_BINARY"

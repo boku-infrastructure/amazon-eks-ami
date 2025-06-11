@@ -87,12 +87,6 @@ if yum list installed | grep ec2-net-utils; then sudo yum remove ec2-net-utils -
 sudo mkdir -p /etc/eks/
 
 ################################################################################
-### Time #######################################################################
-################################################################################
-
-sudo mv $WORKING_DIR/configure-clocksource.service /etc/eks/configure-clocksource.service
-
-################################################################################
 ### SSH ########################################################################
 ################################################################################
 
@@ -139,6 +133,12 @@ sudo mv "${WORKING_DIR}/runtime.slice" /etc/systemd/system/runtime.slice
 # the required binaries are not present.
 sudo mv $WORKING_DIR/set-nvidia-clocks.service /etc/systemd/system/set-nvidia-clocks.service
 sudo systemctl enable set-nvidia-clocks.service
+
+# backporting removal of default dummy0 network interface in systemd v236
+# https://github.com/systemd/systemd/blob/16ac586e5a77942bf1147bc9eae684d544ded88f/NEWS#L11139-L11144
+cat << EOF | sudo tee /lib/modprobe.d/10-no-dummies.conf
+options dummy numdummies=0
+EOF
 
 ###############################################################################
 ### Containerd setup ##########################################################
@@ -282,8 +282,8 @@ BINARIES=(
 for binary in ${BINARIES[*]}; do
   if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
     echo "AWS cli present - using it to copy binaries from s3."
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary .
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary.sha256 .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$binary.sha256 .
   else
     echo "AWS cli missing - using wget to fetch binaries from s3. Note: This won't work for private bucket."
     sudo wget $S3_URL_BASE/$binary
@@ -316,8 +316,8 @@ if [ "$PULL_CNI_FROM_GITHUB" = "true" ]; then
 else
   if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
     echo "AWS cli present - using it to copy binaries from s3."
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/${CNI_PLUGIN_FILENAME}.tgz .
-    sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/${CNI_PLUGIN_FILENAME}.tgz.sha256 .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/${CNI_PLUGIN_FILENAME}.tgz .
+    aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/${CNI_PLUGIN_FILENAME}.tgz.sha256 .
   else
     echo "AWS cli missing - using wget to fetch cni binaries from s3. Note: This won't work for private bucket."
     sudo wget "$S3_URL_BASE/${CNI_PLUGIN_FILENAME}.tgz"
@@ -377,7 +377,7 @@ sudo chmod +x /etc/eks/max-pods-calculator.sh
 ECR_CREDENTIAL_PROVIDER_BINARY="ecr-credential-provider"
 if [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
   echo "AWS cli present - using it to copy ${ECR_CREDENTIAL_PROVIDER_BINARY} from s3."
-  sudo -E aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$ECR_CREDENTIAL_PROVIDER_BINARY .
+  aws s3 cp --region $BINARY_BUCKET_REGION $S3_PATH/$ECR_CREDENTIAL_PROVIDER_BINARY .
 else
   echo "AWS cli missing - using wget to fetch ${ECR_CREDENTIAL_PROVIDER_BINARY} from s3. Note: This won't work for private bucket."
   sudo wget "$S3_URL_BASE/$ECR_CREDENTIAL_PROVIDER_BINARY"
@@ -385,6 +385,11 @@ fi
 sudo chmod +x $ECR_CREDENTIAL_PROVIDER_BINARY
 sudo mkdir -p /etc/eks/image-credential-provider
 sudo mv $ECR_CREDENTIAL_PROVIDER_BINARY /etc/eks/image-credential-provider/
+# ecr-credential-provider has support for public.ecr.aws in 1.27+
+if vercmp "${KUBERNETES_VERSION}" gteq "1.27.0"; then
+  ECR_CRED_PROVIDER_CONFIG_WITH_PUBLIC=$(cat $WORKING_DIR/ecr-credential-provider-config.json | jq '.providers[0].matchImages += ["public.ecr.aws"]')
+  echo "${ECR_CRED_PROVIDER_CONFIG_WITH_PUBLIC}" > $WORKING_DIR/ecr-credential-provider-config.json
+fi
 sudo mv $WORKING_DIR/ecr-credential-provider-config.json /etc/eks/image-credential-provider/config.json
 
 ################################################################################
