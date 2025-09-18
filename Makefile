@@ -12,10 +12,14 @@ endif
 K8S_VERSION_PARTS := $(subst ., ,$(kubernetes_version))
 K8S_VERSION_MINOR := $(word 1,${K8S_VERSION_PARTS}).$(word 2,${K8S_VERSION_PARTS})
 
-AMI_VARIANT ?= amazon-eks-docker
+AMI_VARIANT ?= amazon-eks
 AMI_VERSION ?= v$(shell date '+%Y%m%d')
 os_distro ?= al2
 arch ?= x86_64
+
+ifneq ($(filter true,$(install_docker)),)
+	AMI_VARIANT := $(AMI_VARIANT)-docker
+endif
 
 ifeq ($(os_distro), al2023)
 	AMI_VARIANT := $(AMI_VARIANT)-al2023
