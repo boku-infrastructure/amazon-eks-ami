@@ -16,6 +16,8 @@
     "binary_bucket_region": null,
     "containerd_version": null,
     "install_containerd_from_s3": null,
+    "install_docker": null,
+    "docker_version": null,
     "creator": null,
     "enable_accelerator": null,
     "enable_efa": null,
@@ -109,6 +111,7 @@
         "source_ami_id": "{{ .SourceAMI }}",
         "source_ami_name": "{{ .SourceAMIName }}",
         "containerd_version": "{{ user `containerd_version`}}",
+        "docker_version": "{{ user `docker_version`}}",
         "kubernetes": "{{ user `kubernetes_version`}}/{{ user `kubernetes_build_date` }}/bin/linux/{{ user `arch` }}",
         "ssm_agent_version": "{{ user `ssm_agent_version`}}"
       },
@@ -215,6 +218,15 @@
         "RUNC_VERSION={{user `runc_version`}}",
         "SSM_AGENT_VERSION={{user `ssm_agent_version`}}",
         "WORKING_DIR={{user `working_dir`}}"
+      ]
+    },
+    {
+      "type": "shell",
+      "remote_folder": "{{ user `remote_folder`}}",
+      "script": "{{template_dir}}/provisioners/install-docker.sh",
+      "environment_vars": [
+        "INSTALL_DOCKER={{user `install_docker`}}",
+        "DOCKER_VERSION={{user `docker_version`}}"
       ]
     },
     {
